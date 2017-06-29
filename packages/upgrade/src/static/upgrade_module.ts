@@ -8,6 +8,7 @@
 
 import {Injector, NgModule, NgZone, Testability, ɵNOT_FOUND_CHECK_ONLY_ELEMENT_INJECTOR as NOT_FOUND_CHECK_ONLY_ELEMENT_INJECTOR} from '@angular/core';
 
+import 'rxjs/add/operator/filter';
 import * as angular from '../common/angular1';
 import {$$TESTABILITY, $DELEGATE, $INJECTOR, $INTERVAL, $PROVIDE, INJECTOR_KEY, UPGRADE_MODULE_NAME} from '../common/constants';
 import {controllerKey} from '../common/util';
@@ -237,8 +238,37 @@ export class UpgradeModule {
                 // stabilizing
                 setTimeout(() => {
                   const $rootScope = $injector.get('$rootScope');
-                  const subscription =
-                      this.ngZone.onMicrotaskEmpty.subscribe(() => $rootScope.$digest());
+                  let lastRun = window.performance.now();
+                  let isDigestScheduled = false;
+                  let digestsPerFrame = 0;
+                  const FRAME_DURATION = 16; // 16ms - typical frame duration for 60FPS rendering
+                  const runDigest = () => {
+                    isDigestScheduled = false;
+                    $rootScope.$$phase ? $rootScope.$applyAsync() : $rootScope.$digest();
+                  };
+
+                  const subscription = this.ngZone.onMicrotaskEmpty
+                    .filter(() => !isDigestScheduled)
+                    .subscribe(() => {
+                      // digest happened in previous frame(s) - no problem, run digest again
+                      if (window.performance.now() - lastRun > FRAME_DURATION) {
+                        digestsPerFrame = 1;
+                        runDigest();
+                      } else {
+                        // detected attempt to run several digests in one frame - allow only two digests then
+                        // if more - skip all further attempts and schedule digest on next frame
+                        if (digestsPerFrame < 2) {
+                          digestsPerFrame++;
+                          runDigest();
+                        } else {
+                          isDigestScheduled = true;
+                          digestsPerFrame = 0;
+                          setTimeout(runDigest, FRAME_DURATION);
+                        }
+                      }
+                      lastRun = window.performance.now();
+                    });
+
                   $rootScope.$on('$destroy', () => { subscription.unsubscribe(); });
                 }, 0);
               }
