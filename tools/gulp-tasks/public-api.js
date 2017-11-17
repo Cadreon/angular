@@ -1,6 +1,15 @@
+/**
+ * @license
+ * Copyright Google Inc. All Rights Reserved.
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the LICENSE file at https://angular.io/license
+ */
+
 const entrypoints = [
   'dist/packages-dist/core/core.d.ts', 'dist/packages-dist/core/testing.d.ts',
   'dist/packages-dist/common/common.d.ts', 'dist/packages-dist/common/testing.d.ts',
+  'dist/packages-dist/common/http.d.ts', 'dist/packages-dist/common/http/testing.d.ts',
   // The API surface of the compiler is currently unstable - all of the important APIs are exposed
   // via @angular/core, @angular/platform-browser or @angular/platform-browser-dynamic instead.
   //'dist/packages-dist/compiler/index.d.ts',
@@ -16,7 +25,8 @@ const entrypoints = [
   'dist/packages-dist/platform-server/testing.d.ts', 'dist/packages-dist/http/http.d.ts',
   'dist/packages-dist/http/testing.d.ts', 'dist/packages-dist/forms/forms.d.ts',
   'dist/packages-dist/router/router.d.ts', 'dist/packages-dist/animations/animations.d.ts',
-  'dist/packages-dist/animations/browser.d.ts',
+  'dist/packages-dist/service-worker/service-worker.d.ts',
+  'dist/packages-dist/service-worker/config.d.ts', 'dist/packages-dist/animations/browser.d.ts',
   'dist/packages-dist/animations/browser/testing.d.ts',
   'dist/packages-dist/platform-browser/animations.d.ts'
 ];

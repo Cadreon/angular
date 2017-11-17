@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
 import * as shell from 'shelljs';
+import {HIDDEN_DIR_PREFIX, SHORT_SHA_LEN} from '../common/constants';
 import {getEnvVar} from '../common/utils';
-import {BuildCreator} from '../upload-server/build-creator';
 
 // Constans
 const TEST_AIO_BUILDS_DIR = getEnvVar('TEST_AIO_BUILDS_DIR');
@@ -18,7 +18,7 @@ const TEST_AIO_UPLOAD_PORT = +getEnvVar('TEST_AIO_UPLOAD_PORT');
 const WWW_USER = getEnvVar('AIO_WWW_USER');
 
 // Interfaces - Types
-export interface CmdResult { success: boolean; err: Error; stdout: string; stderr: string; }
+export interface CmdResult { success: boolean; err: Error | null; stdout: string; stderr: string; }
 export interface FileSpecs { content?: string; size?: number; }
 
 export type CleanUpFn = () => void;
@@ -51,8 +51,9 @@ class Helper {
   }
 
   // Methods - Public
-  public buildExists(pr: string, sha = '', isPublic = true): boolean {
-    const dir = path.join(this.getPrDir(pr, isPublic), sha);
+  public buildExists(pr: string, sha = '', isPublic = true, legacy = false): boolean {
+    const prDir = this.getPrDir(pr, isPublic);
+    const dir = !sha ? prDir : this.getShaDir(prDir, sha, legacy);
     return fs.existsSync(dir);
   }
 
@@ -68,7 +69,7 @@ class Helper {
   }
 
   public createDummyArchive(pr: string, sha: string, archivePath: string): CleanUpFn {
-    const inputDir = path.join(this.buildsDir, 'uploaded', pr, sha);
+    const inputDir = this.getShaDir(this.getPrDir(`uploaded/${pr}`, true), sha);
     const cmd1 = `tar --create --gzip --directory "${inputDir}" --file "${archivePath}" .`;
     const cmd2 = `chown ${this.wwwUser} ${archivePath}`;
 
@@ -80,9 +81,9 @@ class Helper {
     return this.createCleanUpFn(() => shell.rm('-rf', archivePath));
   }
 
-  public createDummyBuild(pr: string, sha: string, isPublic = true, force = false): CleanUpFn {
+  public createDummyBuild(pr: string, sha: string, isPublic = true, force = false, legacy = false): CleanUpFn {
     const prDir = this.getPrDir(pr, isPublic);
-    const shaDir = path.join(prDir, sha);
+    const shaDir = this.getShaDir(prDir, sha, legacy);
     const idxPath = path.join(shaDir, 'index.html');
     const barPath = path.join(shaDir, 'foo', 'bar.js');
 
@@ -104,13 +105,21 @@ class Helper {
   }
 
   public getPrDir(pr: string, isPublic: boolean): string {
-    const prDirName = isPublic ? pr : BuildCreator.HIDDEN_DIR_PREFIX + pr;
+    const prDirName = isPublic ? pr : HIDDEN_DIR_PREFIX + pr;
     return path.join(this.buildsDir, prDirName);
   }
 
-  public readBuildFile(pr: string, sha: string, relFilePath: string, isPublic = true): string {
-    const prDir = this.getPrDir(pr, isPublic);
-    const absFilePath = path.join(prDir, sha, relFilePath);
+  public getShaDir(prDir: string, sha: string, legacy = false): string {
+    return path.join(prDir, legacy ? sha : this.getShordSha(sha));
+  }
+
+  public getShordSha(sha: string): string {
+    return sha.substr(0, SHORT_SHA_LEN);
+  }
+
+  public readBuildFile(pr: string, sha: string, relFilePath: string, isPublic = true, legacy = false): string {
+    const shaDir = this.getShaDir(this.getPrDir(pr, isPublic), sha, legacy);
+    const absFilePath = path.join(shaDir, relFilePath);
     return fs.readFileSync(absFilePath, 'utf8');
   }
 
@@ -134,7 +143,7 @@ class Helper {
       statusText = status[1];
     } else {
       statusCode = status;
-      statusText = http.STATUS_CODES[statusCode];
+      statusText = http.STATUS_CODES[statusCode] || 'UNKNOWN_STATUS_CODE';
     }
 
     return (result: CmdResult) => {
@@ -156,8 +165,10 @@ class Helper {
     };
   }
 
-  public writeBuildFile(pr: string, sha: string, relFilePath: string, content: string, isPublic = true): CleanUpFn {
-    const absFilePath = path.join(this.getPrDir(pr, isPublic), sha, relFilePath);
+  public writeBuildFile(pr: string, sha: string, relFilePath: string, content: string, isPublic = true,
+                        legacy = false): CleanUpFn {
+    const shaDir = this.getShaDir(this.getPrDir(pr, isPublic), sha, legacy);
+    const absFilePath = path.join(shaDir, relFilePath);
     return this.writeFile(absFilePath, {content}, true);
   }
 
@@ -185,7 +196,7 @@ class Helper {
   }
 
   // Methods - Protected
-  protected createCleanUpFn(fn: Function): CleanUpFn {
+  protected createCleanUpFn(fn: () => void): CleanUpFn {
     const cleanUpFn = () => {
       const idx = this.cleanUpFns.indexOf(cleanUpFn);
       if (idx !== -1) {

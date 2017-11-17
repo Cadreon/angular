@@ -37,13 +37,19 @@ case ${CI_MODE} in
   browserstack_optional)
     ${thisDir}/test-browserstack.sh
     ;;
-  docs_test)
-    ${thisDir}/test-docs.sh
+  aio_tools_test)
+    ${thisDir}/test-aio-tools.sh
     ;;
   aio)
     ${thisDir}/test-aio.sh
     ;;
   aio_e2e)
     ${thisDir}/test-aio-e2e.sh
+    ;;
+  aio_optional)
+    ${thisDir}/test-aio-optional.sh
+    ;;
+  bazel)
+    ${thisDir}/test-bazel.sh
     ;;
 esac

@@ -7,10 +7,15 @@
 #
 # alexeagle - Alex Eagle
 # alxhub - Alex Rickabaugh
+# brocco - Mike Brocchi
 # chuckjaz - Chuck Jazdzewski
+# filipesilva - Filipe Silva
+# Foxandxss - Jesús Rodríguez
 # gkalpak - George Kalpakas
+# hansl - Hans Larsen
 # IgorMinar - Igor Minar
 # jasonaden - Jason Aden
+# juleskremer - Jules Kremer
 # kara - Kara Erickson
 # matsko - Matias Niemelä
 # mhevery - Misko Hevery
@@ -18,10 +23,11 @@
 # pkozlowski-opensource - Pawel Kozlowski
 # robwormald - Rob Wormald
 # tbosch - Tobias Bosch
+# tinayuangao - Tina Gao
 # vicb - Victor Berchet
 # vikerman - Vikram Subramanian
 # wardbell - Ward Bell
-# tinayuangao - Tina Gao
+
 
 version: 2
 
@@ -57,6 +63,19 @@ groups:
       - IgorMinar
       - mhevery
 
+  bazel:
+    conditions:
+      files:
+        include:
+          - "WORKSPACE"
+          - "*.bazel"
+          - "*.bzl"
+          - "packages/bazel/*"
+    users:
+      - alexeagle #primary
+      - chuckjaz
+      - vikerman #fallback
+
   build-and-ci:
     conditions:
       files:
@@ -66,7 +85,6 @@ groups:
           - "*.lock"
           - "tools/*"
         exclude:
-          - "tools/@angular/tsc-wrapped/*"
           - "tools/public_api_guard/*"
           - "aio/*"
     users:
@@ -86,13 +104,13 @@ groups:
       - vicb
       - IgorMinar #fallback
 
-
   core:
     conditions:
       files:
         - "packages/core/*"
     users:
       - tbosch #primary
+      - chuckjaz
       - mhevery
       - vicb
       - IgorMinar #fallback
@@ -100,10 +118,11 @@ groups:
   animations:
     conditions:
       files:
-        - "packages/animation/*"
+        - "packages/animations/*"
         - "packages/platform-browser/animations/*"
     users:
       - matsko #primary
+      - chuckjaz #fallback
       - mhevery #fallback
       - IgorMinar #fallback
 
@@ -128,11 +147,23 @@ groups:
       - mhevery
       - IgorMinar #fallback
 
+  compiler-cli/ngtools:
+    conditions:
+      files:
+        - "packages/compiler-cli/src/ngtools*"
+    users:
+      - hansl
+      - filipesilva #fallback
+      - brocco #fallback
+
   compiler-cli:
     conditions:
       files:
-        - "tools/@angular/tsc-wrapped/*"
-        - "packages/compiler-cli/*"
+        include:
+          - "packages/compiler-cli/*"
+          - "packages/bazel/*"
+        exclude:
+          - "packages/compiler-cli/src/ngtools*"   
     users:
       - alexeagle
       - chuckjaz
@@ -144,7 +175,10 @@ groups:
   common:
     conditions:
       files:
-        - "packages/common/*"
+        include:
+          - "packages/common/*"
+        exclude:
+          - "packages/common/http/*"
     users:
       - pkozlowski-opensource #primary
       - vicb
@@ -164,6 +198,7 @@ groups:
   http:
     conditions:
       files:
+        - "packages/common/http/*"
         - "packages/http/*"
     users:
       - vikerman #primary
@@ -234,7 +269,15 @@ groups:
       - IgorMinar #fallback
       - mhevery #fallback
 
-
+  service-worker:
+    conditions:
+      files:
+        - "packages/service-worker/*"
+    users:
+      - alxhub #primary
+      - gkalpak
+      - IgorMinar #fallback
+      - mhevery #fallback
 
   benchpress:
     conditions:
@@ -249,10 +292,46 @@ groups:
   angular.io:
     conditions:
       files:
-        - "aio/*"
+        include:
+          - "aio/*"
+        exclude:
+          - "aio/content/*"
     users:
-      - IgorMinar #primary
-      - petebacondarwin #secondary
+      - petebacondarwin #primary
+      - IgorMinar
       - gkalpak
+      - mhevery #fallback
+
+  angular.io-guide-and-tutorial:
+    conditions:
+      files:
+        include:
+          - "aio/content/*"
+        exclude:
+          - "aio/content/marketing/*"
+          - "aio/content/navigation.json"
+          - "aio/content/license.md"
+    users:
+      - juleskremer #primary
+      - Foxandxss
+      - stephenfluin
       - wardbell
+      - petebacondarwin
+      - gkalpak
+      - IgorMinar #fallback
+      - mhevery #fallback
+
+  angular.io-marketing:
+    conditions:
+      files:
+        include:
+          - "aio/content/marketing/*"
+          - "aio/content/navigation.json"
+          - "aio/content/license.md"
+    users:
+      - juleskremer #primary
+      - stephenfluin
+      - petebacondarwin
+      - gkalpak
+      - IgorMinar #fallback
       - mhevery #fallback

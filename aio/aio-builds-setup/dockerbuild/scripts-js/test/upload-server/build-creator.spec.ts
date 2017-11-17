@@ -4,6 +4,7 @@ import {EventEmitter} from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as shell from 'shelljs';
+import {SHORT_SHA_LEN} from '../../lib/common/constants';
 import {BuildCreator} from '../../lib/upload-server/build-creator';
 import {ChangedPrVisibilityEvent, CreatedBuildEvent} from '../../lib/upload-server/build-events';
 import {UploadError} from '../../lib/upload-server/upload-error';
@@ -13,12 +14,13 @@ import {expectToBeUploadError} from './helpers';
 describe('BuildCreator', () => {
   const pr = '9';
   const sha = '9'.repeat(40);
+  const shortSha = sha.substr(0, SHORT_SHA_LEN);
   const archive = 'snapshot.tar.gz';
   const buildsDir = 'builds/dir';
   const hiddenPrDir = path.join(buildsDir, `hidden--${pr}`);
   const publicPrDir = path.join(buildsDir, pr);
-  const hiddenShaDir = path.join(hiddenPrDir, sha);
-  const publicShaDir = path.join(publicPrDir, sha);
+  const hiddenShaDir = path.join(hiddenPrDir, shortSha);
+  const publicShaDir = path.join(publicPrDir, shortSha);
   let bc: BuildCreator;
 
   beforeEach(() => bc = new BuildCreator(buildsDir));
@@ -41,178 +43,25 @@ describe('BuildCreator', () => {
   });
 
 
-  describe('changePrVisibility()', () => {
-    let bcEmitSpy: jasmine.Spy;
-    let bcExistsSpy: jasmine.Spy;
-    let bcListShasByDate: jasmine.Spy;
-    let shellMvSpy: jasmine.Spy;
-
-    beforeEach(() => {
-      bcEmitSpy = spyOn(bc, 'emit');
-      bcExistsSpy = spyOn(bc as any, 'exists');
-      bcListShasByDate = spyOn(bc as any, 'listShasByDate');
-      shellMvSpy = spyOn(shell, 'mv');
-
-      bcExistsSpy.and.returnValues(Promise.resolve(true), Promise.resolve(false));
-      bcListShasByDate.and.returnValue([]);
-    });
-
-
-    it('should return a promise', done => {
-      const promise = bc.changePrVisibility(pr, true);
-      promise.then(done);   // Do not complete the test (and release the spies) synchronously
-                            // to avoid running the actual `extractArchive()`.
-
-      expect(promise).toEqual(jasmine.any(Promise));
-    });
-
-
-    [true, false].forEach(makePublic => {
-      const oldPrDir = makePublic ? hiddenPrDir : publicPrDir;
-      const newPrDir = makePublic ? publicPrDir : hiddenPrDir;
-
-
-      it('should rename the directory', done => {
-        bc.changePrVisibility(pr, makePublic).
-          then(() => expect(shellMvSpy).toHaveBeenCalledWith(oldPrDir, newPrDir)).
-          then(done);
-      });
-
-
-      it('should emit a ChangedPrVisibilityEvent on success', done => {
-        let emitted = false;
-
-        bcEmitSpy.and.callFake((type: string, evt: ChangedPrVisibilityEvent) => {
-          expect(type).toBe(ChangedPrVisibilityEvent.type);
-          expect(evt).toEqual(jasmine.any(ChangedPrVisibilityEvent));
-          expect(evt.pr).toBe(+pr);
-          expect(evt.shas).toEqual(jasmine.any(Array));
-          expect(evt.isPublic).toBe(makePublic);
-
-          emitted = true;
-        });
-
-        bc.changePrVisibility(pr, makePublic).
-          then(() => expect(emitted).toBe(true)).
-          then(done);
-      });
-
-
-      it('should include all shas in the emitted event', done => {
-        const shas = ['foo', 'bar', 'baz'];
-        let emitted = false;
-
-        bcListShasByDate.and.returnValue(Promise.resolve(shas));
-        bcEmitSpy.and.callFake((type: string, evt: ChangedPrVisibilityEvent) => {
-          expect(bcListShasByDate).toHaveBeenCalledWith(newPrDir);
-
-          expect(type).toBe(ChangedPrVisibilityEvent.type);
-          expect(evt).toEqual(jasmine.any(ChangedPrVisibilityEvent));
-          expect(evt.pr).toBe(+pr);
-          expect(evt.shas).toBe(shas);
-          expect(evt.isPublic).toBe(makePublic);
-
-          emitted = true;
-        });
-
-        bc.changePrVisibility(pr, makePublic).
-          then(() => expect(emitted).toBe(true)).
-          then(done);
-      });
-
-
-      describe('on error', () => {
-
-        it('should abort and skip further operations if the old directory does not exist', done => {
-          bcExistsSpy.and.callFake((dir: string) => dir !== oldPrDir);
-          bc.changePrVisibility(pr, makePublic).catch(err => {
-            expectToBeUploadError(err, 404, `Request to move non-existing directory '${oldPrDir}' to '${newPrDir}'.`);
-            expect(shellMvSpy).not.toHaveBeenCalled();
-            expect(bcListShasByDate).not.toHaveBeenCalled();
-            expect(bcEmitSpy).not.toHaveBeenCalled();
-            done();
-          });
-        });
-
-
-        it('should abort and skip further operations if the new directory does already exist', done => {
-          bcExistsSpy.and.returnValue(true);
-          bc.changePrVisibility(pr, makePublic).catch(err => {
-            expectToBeUploadError(err, 409, `Request to move '${oldPrDir}' to existing directory '${newPrDir}'.`);
-            expect(shellMvSpy).not.toHaveBeenCalled();
-            expect(bcListShasByDate).not.toHaveBeenCalled();
-            expect(bcEmitSpy).not.toHaveBeenCalled();
-            done();
-          });
-        });
-
-
-        it('should abort and skip further operations if it fails to rename the directory', done => {
-          shellMvSpy.and.throwError('');
-          bc.changePrVisibility(pr, makePublic).catch(() => {
-            expect(shellMvSpy).toHaveBeenCalled();
-            expect(bcListShasByDate).not.toHaveBeenCalled();
-            expect(bcEmitSpy).not.toHaveBeenCalled();
-            done();
-          });
-        });
-
-
-        it('should abort and skip further operations if it fails to list the SHAs', done => {
-          bcListShasByDate.and.throwError('');
-          bc.changePrVisibility(pr, makePublic).catch(() => {
-            expect(shellMvSpy).toHaveBeenCalled();
-            expect(bcListShasByDate).toHaveBeenCalled();
-            expect(bcEmitSpy).not.toHaveBeenCalled();
-            done();
-          });
-        });
-
-
-        it('should reject with an UploadError', done => {
-          shellMvSpy.and.callFake(() => { throw 'Test'; });
-          bc.changePrVisibility(pr, makePublic).catch(err => {
-            expectToBeUploadError(err, 500, `Error while making PR ${pr} ${makePublic ? 'public' : 'hidden'}.\nTest`);
-            done();
-          });
-        });
-
-
-        it('should pass UploadError instances unmodified', done => {
-          shellMvSpy.and.callFake(() => { throw new UploadError(543, 'Test'); });
-          bc.changePrVisibility(pr, makePublic).catch(err => {
-            expectToBeUploadError(err, 543, 'Test');
-            done();
-          });
-        });
-
-      });
-
-    });
-
-  });
-
-
   describe('create()', () => {
-    let bcChangePrVisibilitySpy: jasmine.Spy;
     let bcEmitSpy: jasmine.Spy;
     let bcExistsSpy: jasmine.Spy;
     let bcExtractArchiveSpy: jasmine.Spy;
+    let bcUpdatePrVisibilitySpy: jasmine.Spy;
     let shellMkdirSpy: jasmine.Spy;
     let shellRmSpy: jasmine.Spy;
 
     beforeEach(() => {
-      bcChangePrVisibilitySpy = spyOn(bc, 'changePrVisibility');
       bcEmitSpy = spyOn(bc, 'emit');
       bcExistsSpy = spyOn(bc as any, 'exists');
       bcExtractArchiveSpy = spyOn(bc as any, 'extractArchive');
+      bcUpdatePrVisibilitySpy = spyOn(bc, 'updatePrVisibility');
       shellMkdirSpy = spyOn(shell, 'mkdir');
       shellRmSpy = spyOn(shell, 'rm');
     });
 
 
     [true, false].forEach(isPublic => {
-      const otherVisPrDir = isPublic ? hiddenPrDir : publicPrDir;
       const prDir = isPublic ? publicPrDir : hiddenPrDir;
       const shaDir = isPublic ? publicShaDir : hiddenShaDir;
 
@@ -226,20 +75,12 @@ describe('BuildCreator', () => {
       });
 
 
-      it('should not update the PR\'s visibility first if not necessary', done => {
-        bc.create(pr, sha, archive, isPublic).
-          then(() => expect(bcChangePrVisibilitySpy).not.toHaveBeenCalled()).
-          then(done);
-      });
-
-
       it('should update the PR\'s visibility first if necessary', done => {
-        bcChangePrVisibilitySpy.and.callFake(() => expect(shellMkdirSpy).not.toHaveBeenCalled());
-        bcExistsSpy.and.callFake((dir: string) => dir === otherVisPrDir);
+        bcUpdatePrVisibilitySpy.and.callFake(() => expect(shellMkdirSpy).not.toHaveBeenCalled());
 
         bc.create(pr, sha, archive, isPublic).
           then(() => {
-            expect(bcChangePrVisibilitySpy).toHaveBeenCalledWith(pr, isPublic);
+            expect(bcUpdatePrVisibilitySpy).toHaveBeenCalledWith(pr, isPublic);
             expect(shellMkdirSpy).toHaveBeenCalled();
           }).
           then(done);
@@ -267,7 +108,7 @@ describe('BuildCreator', () => {
           expect(type).toBe(CreatedBuildEvent.type);
           expect(evt).toEqual(jasmine.any(CreatedBuildEvent));
           expect(evt.pr).toBe(+pr);
-          expect(evt.sha).toBe(sha);
+          expect(evt.sha).toBe(shortSha);
           expect(evt.isPublic).toBe(isPublic);
 
           emitted = true;
@@ -284,7 +125,6 @@ describe('BuildCreator', () => {
 
         beforeEach(() => {
           existsValues = {
-            [otherVisPrDir]: false,
             [prDir]: false,
             [shaDir]: false,
           };
@@ -295,14 +135,12 @@ describe('BuildCreator', () => {
 
         it('should abort and skip further operations if changing the PR\'s visibility fails', done => {
           const mockError = new UploadError(543, 'Test');
-
-          existsValues[otherVisPrDir] = true;
-          bcChangePrVisibilitySpy.and.returnValue(Promise.reject(mockError));
+          bcUpdatePrVisibilitySpy.and.returnValue(Promise.reject(mockError));
 
           bc.create(pr, sha, archive, isPublic).catch(err => {
             expect(err).toBe(mockError);
 
-            expect(bcExistsSpy).toHaveBeenCalledTimes(1);
+            expect(bcExistsSpy).not.toHaveBeenCalled();
             expect(shellMkdirSpy).not.toHaveBeenCalled();
             expect(bcExtractArchiveSpy).not.toHaveBeenCalled();
             expect(bcEmitSpy).not.toHaveBeenCalled();
@@ -315,7 +153,8 @@ describe('BuildCreator', () => {
         it('should abort and skip further operations if the build does already exist', done => {
           existsValues[shaDir] = true;
           bc.create(pr, sha, archive, isPublic).catch(err => {
-            expectToBeUploadError(err, 409, `Request to overwrite existing directory: ${shaDir}`);
+            const publicOrNot = isPublic ? 'public' : 'non-public';
+            expectToBeUploadError(err, 409, `Request to overwrite existing ${publicOrNot} directory: ${shaDir}`);
             expect(shellMkdirSpy).not.toHaveBeenCalled();
             expect(bcExtractArchiveSpy).not.toHaveBeenCalled();
             expect(bcEmitSpy).not.toHaveBeenCalled();
@@ -325,11 +164,14 @@ describe('BuildCreator', () => {
 
 
         it('should detect existing build directory after visibility change', done => {
-          existsValues[otherVisPrDir] = true;
-          bcChangePrVisibilitySpy.and.callFake(() => existsValues[prDir] = existsValues[shaDir] = true);
+          bcUpdatePrVisibilitySpy.and.callFake(() => existsValues[prDir] = existsValues[shaDir] = true);
+
+          expect(bcExistsSpy(prDir)).toBe(false);
+          expect(bcExistsSpy(shaDir)).toBe(false);
 
           bc.create(pr, sha, archive, isPublic).catch(err => {
-            expectToBeUploadError(err, 409, `Request to overwrite existing directory: ${shaDir}`);
+            const publicOrNot = isPublic ? 'public' : 'non-public';
+            expectToBeUploadError(err, 409, `Request to overwrite existing ${publicOrNot} directory: ${shaDir}`);
             expect(shellMkdirSpy).not.toHaveBeenCalled();
             expect(bcExtractArchiveSpy).not.toHaveBeenCalled();
             expect(bcEmitSpy).not.toHaveBeenCalled();
@@ -381,6 +223,7 @@ describe('BuildCreator', () => {
 
 
         it('should reject with an UploadError', done => {
+          // tslint:disable-next-line: no-string-throw
           shellMkdirSpy.and.callFake(() => { throw 'Test'; });
           bc.create(pr, sha, archive, isPublic).catch(err => {
             expectToBeUploadError(err, 500, `Error while uploading to directory: ${shaDir}\nTest`);
@@ -404,15 +247,200 @@ describe('BuildCreator', () => {
   });
 
 
+  describe('updatePrVisibility()', () => {
+    let bcEmitSpy: jasmine.Spy;
+    let bcExistsSpy: jasmine.Spy;
+    let bcListShasByDate: jasmine.Spy;
+    let shellMvSpy: jasmine.Spy;
+
+    beforeEach(() => {
+      bcEmitSpy = spyOn(bc, 'emit');
+      bcExistsSpy = spyOn(bc as any, 'exists');
+      bcListShasByDate = spyOn(bc as any, 'listShasByDate');
+      shellMvSpy = spyOn(shell, 'mv');
+
+      bcExistsSpy.and.returnValues(Promise.resolve(true), Promise.resolve(false));
+      bcListShasByDate.and.returnValue([]);
+    });
+
+
+    it('should return a promise', done => {
+      const promise = bc.updatePrVisibility(pr, true);
+      promise.then(done);   // Do not complete the test (and release the spies) synchronously
+                            // to avoid running the actual `extractArchive()`.
+
+      expect(promise).toEqual(jasmine.any(Promise));
+    });
+
+
+    [true, false].forEach(makePublic => {
+      const oldPrDir = makePublic ? hiddenPrDir : publicPrDir;
+      const newPrDir = makePublic ? publicPrDir : hiddenPrDir;
+
+
+      it('should rename the directory', done => {
+        bc.updatePrVisibility(pr, makePublic).
+          then(() => expect(shellMvSpy).toHaveBeenCalledWith(oldPrDir, newPrDir)).
+          then(done);
+      });
+
+
+      describe('when the visibility is updated', () => {
+
+        it('should resolve to true', done => {
+          bc.updatePrVisibility(pr, makePublic).
+            then(result => expect(result).toBe(true)).
+            then(done);
+        });
+
+
+        it('should rename the directory', done => {
+          bc.updatePrVisibility(pr, makePublic).
+            then(() => expect(shellMvSpy).toHaveBeenCalledWith(oldPrDir, newPrDir)).
+            then(done);
+        });
+
+
+        it('should emit a ChangedPrVisibilityEvent on success', done => {
+          let emitted = false;
+
+          bcEmitSpy.and.callFake((type: string, evt: ChangedPrVisibilityEvent) => {
+            expect(type).toBe(ChangedPrVisibilityEvent.type);
+            expect(evt).toEqual(jasmine.any(ChangedPrVisibilityEvent));
+            expect(evt.pr).toBe(+pr);
+            expect(evt.shas).toEqual(jasmine.any(Array));
+            expect(evt.isPublic).toBe(makePublic);
+
+            emitted = true;
+          });
+
+          bc.updatePrVisibility(pr, makePublic).
+            then(() => expect(emitted).toBe(true)).
+            then(done);
+        });
+
+
+        it('should include all shas in the emitted event', done => {
+          const shas = ['foo', 'bar', 'baz'];
+          let emitted = false;
+
+          bcListShasByDate.and.returnValue(Promise.resolve(shas));
+          bcEmitSpy.and.callFake((type: string, evt: ChangedPrVisibilityEvent) => {
+            expect(bcListShasByDate).toHaveBeenCalledWith(newPrDir);
+
+            expect(type).toBe(ChangedPrVisibilityEvent.type);
+            expect(evt).toEqual(jasmine.any(ChangedPrVisibilityEvent));
+            expect(evt.pr).toBe(+pr);
+            expect(evt.shas).toBe(shas);
+            expect(evt.isPublic).toBe(makePublic);
+
+            emitted = true;
+          });
+
+          bc.updatePrVisibility(pr, makePublic).
+            then(() => expect(emitted).toBe(true)).
+            then(done);
+        });
+
+      });
+
+
+      it('should do nothing if the visibility is already up-to-date', done => {
+        bcExistsSpy.and.callFake((dir: string) => dir === newPrDir);
+        bc.updatePrVisibility(pr, makePublic).
+          then(result => {
+            expect(result).toBe(false);
+            expect(shellMvSpy).not.toHaveBeenCalled();
+            expect(bcListShasByDate).not.toHaveBeenCalled();
+            expect(bcEmitSpy).not.toHaveBeenCalled();
+          }).
+          then(done);
+      });
+
+
+      it('should do nothing if the PR directory does not exist', done => {
+        bcExistsSpy.and.returnValue(false);
+        bc.updatePrVisibility(pr, makePublic).
+          then(result => {
+            expect(result).toBe(false);
+            expect(shellMvSpy).not.toHaveBeenCalled();
+            expect(bcListShasByDate).not.toHaveBeenCalled();
+            expect(bcEmitSpy).not.toHaveBeenCalled();
+          }).
+          then(done);
+      });
+
+
+      describe('on error', () => {
+
+        it('should abort and skip further operations if both directories exist', done => {
+          bcExistsSpy.and.returnValue(true);
+          bc.updatePrVisibility(pr, makePublic).catch(err => {
+            expectToBeUploadError(err, 409, `Request to move '${oldPrDir}' to existing directory '${newPrDir}'.`);
+            expect(shellMvSpy).not.toHaveBeenCalled();
+            expect(bcListShasByDate).not.toHaveBeenCalled();
+            expect(bcEmitSpy).not.toHaveBeenCalled();
+            done();
+          });
+        });
+
+
+        it('should abort and skip further operations if it fails to rename the directory', done => {
+          shellMvSpy.and.throwError('');
+          bc.updatePrVisibility(pr, makePublic).catch(() => {
+            expect(shellMvSpy).toHaveBeenCalled();
+            expect(bcListShasByDate).not.toHaveBeenCalled();
+            expect(bcEmitSpy).not.toHaveBeenCalled();
+            done();
+          });
+        });
+
+
+        it('should abort and skip further operations if it fails to list the SHAs', done => {
+          bcListShasByDate.and.throwError('');
+          bc.updatePrVisibility(pr, makePublic).catch(() => {
+            expect(shellMvSpy).toHaveBeenCalled();
+            expect(bcListShasByDate).toHaveBeenCalled();
+            expect(bcEmitSpy).not.toHaveBeenCalled();
+            done();
+          });
+        });
+
+
+        it('should reject with an UploadError', done => {
+          // tslint:disable-next-line: no-string-throw
+          shellMvSpy.and.callFake(() => { throw 'Test'; });
+          bc.updatePrVisibility(pr, makePublic).catch(err => {
+            expectToBeUploadError(err, 500, `Error while making PR ${pr} ${makePublic ? 'public' : 'hidden'}.\nTest`);
+            done();
+          });
+        });
+
+
+        it('should pass UploadError instances unmodified', done => {
+          shellMvSpy.and.callFake(() => { throw new UploadError(543, 'Test'); });
+          bc.updatePrVisibility(pr, makePublic).catch(err => {
+            expectToBeUploadError(err, 543, 'Test');
+            done();
+          });
+        });
+
+      });
+
+    });
+
+  });
+
+
   // Protected methods
 
   describe('exists()', () => {
     let fsAccessSpy: jasmine.Spy;
-    let fsAccessCbs: Function[];
+    let fsAccessCbs: ((v?: any) => void)[];
 
     beforeEach(() => {
       fsAccessCbs = [];
-      fsAccessSpy = spyOn(fs, 'access').and.callFake((_: string, cb: Function) => fsAccessCbs.push(cb));
+      fsAccessSpy = spyOn(fs, 'access').and.callFake((_: string, cb: (v?: any) => void) => fsAccessCbs.push(cb));
     });
 
 
@@ -456,7 +484,7 @@ describe('BuildCreator', () => {
     let shellChmodSpy: jasmine.Spy;
     let shellRmSpy: jasmine.Spy;
     let cpExecSpy: jasmine.Spy;
-    let cpExecCbs: Function[];
+    let cpExecCbs: ((...args: any[]) => void)[];
 
     beforeEach(() => {
       cpExecCbs = [];
@@ -464,7 +492,7 @@ describe('BuildCreator', () => {
       consoleWarnSpy = spyOn(console, 'warn');
       shellChmodSpy = spyOn(shell, 'chmod');
       shellRmSpy = spyOn(shell, 'rm');
-      cpExecSpy = spyOn(cp, 'exec').and.callFake((_: string, cb: Function) => cpExecCbs.push(cb));
+      cpExecSpy = spyOn(cp, 'exec').and.callFake((_: string, cb: (...args: any[]) => void) => cpExecCbs.push(cb));
     });
 
 
@@ -530,7 +558,11 @@ describe('BuildCreator', () => {
           done();
         });
 
-        shellChmodSpy.and.callFake(() => { throw 'Test'; });
+        shellChmodSpy.and.callFake(() => {
+          // tslint:disable-next-line: no-string-throw
+          throw 'Test';
+        });
+
         cpExecCbs[0]();
       });
 
@@ -543,7 +575,11 @@ describe('BuildCreator', () => {
           done();
         });
 
-        shellRmSpy.and.callFake(() => { throw 'Test'; });
+        shellRmSpy.and.callFake(() => {
+          // tslint:disable-next-line: no-string-throw
+          throw 'Test';
+        });
+
         cpExecCbs[0]();
       });
 

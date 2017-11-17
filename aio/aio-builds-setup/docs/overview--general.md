@@ -65,14 +65,34 @@ More info on how to set things up on CI can be found [here](misc--integrate-with
   found [here](overview--security-model.md)).
 - The upload-server changes the "visibility" of the associated PR, if necessary. For example, if
   builds for the same PR had been previously deployed as non-public and the current build has been
-  automatically verified, all previous builds are made public.
+  automatically verified, all previous builds are made public as well.
   If the PR transitions from "non-public" to "public", the upload-server posts a comment on the
   corresponding PR on GitHub mentioning the SHAs and the links where the previews can be found.
 - The upload-server verifies that the uploaded file is not trying to overwrite an existing build.
-- The upload-server deploys the artifacts to a sub-directory named after the PR number and SHA:
-  `<PR>/<SHA>/` (Non-publicly accessible PRs will be stored in a different location.)
+- The upload-server deploys the artifacts to a sub-directory named after the PR number and the first
+  few characters of the SHA: `<PR>/<SHA>/`
+  (Non-publicly accessible PRs will be stored in a different location, but again derived from the PR
+  number and SHA.)
 - If the PR is publicly accessible, the upload-server posts a comment on the corresponding PR on
   GitHub mentioning the SHA and the link where the preview can be found.
+
+More info on the possible HTTP status codes and their meaning can be found
+[here](overview--http-status-codes.md).
+
+
+### Updating PR visibility
+- nginx receives a natification that a PR has been updated and passes it through to the
+  upload-server. This could, for example, be sent by a GitHub webhook every time a PR's labels
+  change.
+  E.g.: `ngbuilds.io/pr-updated` (payload: `{"number":<PR>,"action":"labeled"}`)
+- The request contains the PR number (as `number`) and optionally the action that triggered the
+  request (as `action`) in the payload.
+- The upload-server verifies the payload and determines whether the `action` (if specified) could
+  have led to PR visibility changes. Only requests that omit the `action` field altogether or
+  specify an action that can affect visibility are further processed.
+  (Currently, the only actions that are considered capable of affecting visibility are `labeled` and
+  `unlabeled`.)
+- The upload-server re-checks and if necessary updates the PR's visibility.
 
 More info on the possible HTTP status codes and their meaning can be found
 [here](overview--http-status-codes.md).
@@ -84,7 +104,7 @@ More info on the possible HTTP status codes and their meaning can be found
 - nginx maps the subdomain to the correct sub-directory and serves the resource.
   E.g.: `/<PR>/<SHA>/path/to/resource`
 
-Again, more info on the possible HTTP status codes and their meaning can be found
+More info on the possible HTTP status codes and their meaning can be found
 [here](overview--http-status-codes.md).
 
 

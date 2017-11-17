@@ -116,7 +116,7 @@ describe('uploadServerFactory', () => {
 
     it('should log the server address info on \'listening\'', () => {
       const consoleInfoSpy = spyOn(console, 'info');
-      const server = createUploadServer('builds/dir');
+      const server = createUploadServer();
       server.address = () => ({address: 'foo', family: '', port: 1337});
 
       expect(consoleInfoSpy).not.toHaveBeenCalled();
@@ -258,12 +258,12 @@ describe('uploadServerFactory', () => {
       });
 
 
-      it('should respond with 405 for non-GET requests', done => {
+      it('should respond with 404 for non-GET requests', done => {
         verifyRequests([
-          agent.put(`/create-build/${pr}/${sha}`).expect(405),
-          agent.post(`/create-build/${pr}/${sha}`).expect(405),
-          agent.patch(`/create-build/${pr}/${sha}`).expect(405),
-          agent.delete(`/create-build/${pr}/${sha}`).expect(405),
+          agent.put(`/create-build/${pr}/${sha}`).expect(404),
+          agent.post(`/create-build/${pr}/${sha}`).expect(404),
+          agent.patch(`/create-build/${pr}/${sha}`).expect(404),
+          agent.delete(`/create-build/${pr}/${sha}`).expect(404),
         ], done);
       });
 
@@ -418,12 +418,12 @@ describe('uploadServerFactory', () => {
       });
 
 
-      it('should respond with 405 for non-GET requests', done => {
+      it('should respond with 404 for non-GET requests', done => {
         verifyRequests([
-          agent.put('/health-check').expect(405),
-          agent.post('/health-check').expect(405),
-          agent.patch('/health-check').expect(405),
-          agent.delete('/health-check').expect(405),
+          agent.put('/health-check').expect(404),
+          agent.post('/health-check').expect(404),
+          agent.patch('/health-check').expect(404),
+          agent.delete('/health-check').expect(404),
         ], done);
       });
 
@@ -442,11 +442,141 @@ describe('uploadServerFactory', () => {
     });
 
 
-    describe('GET *', () => {
+    describe('POST /pr-updated', () => {
+      const pr = '9';
+      const url = '/pr-updated';
+      let bvGetPrIsTrustedSpy: jasmine.Spy;
+      let bcUpdatePrVisibilitySpy: jasmine.Spy;
 
-      it('should respond with 404', done => {
-        const responseBody = 'Unknown resource in request: GET /some/url';
-        verifyRequests([agent.get('/some/url').expect(404, responseBody)], done);
+      // Helpers
+      const createRequest = (num: number, action?: string) =>
+        agent.post(url).send({number: num, action});
+
+      beforeEach(() => {
+        bvGetPrIsTrustedSpy = spyOn(buildVerifier, 'getPrIsTrusted');
+        bcUpdatePrVisibilitySpy = spyOn(buildCreator, 'updatePrVisibility');
+      });
+
+
+      it('should respond with 404 for non-POST requests', done => {
+        verifyRequests([
+          agent.get(url).expect(404),
+          agent.put(url).expect(404),
+          agent.patch(url).expect(404),
+          agent.delete(url).expect(404),
+        ], done);
+      });
+
+
+      it('should respond with 400 for requests without a payload', done => {
+        const responseBody = `Missing or empty 'number' field in request: POST ${url} {}`;
+
+        const request1 = agent.post(url);
+        const request2 = agent.post(url).send();
+
+        verifyRequests([
+          request1.expect(400, responseBody),
+          request2.expect(400, responseBody),
+        ], done);
+      });
+
+
+      it('should respond with 400 for requests without a \'number\' field', done => {
+        const responseBodyPrefix = `Missing or empty 'number' field in request: POST ${url}`;
+
+        const request1 = agent.post(url).send({});
+        const request2 = agent.post(url).send({number: null});
+
+        verifyRequests([
+          request1.expect(400, `${responseBodyPrefix} {}`),
+          request2.expect(400, `${responseBodyPrefix} {"number":null}`),
+        ], done);
+      });
+
+
+      it('should call \'BuildVerifier#gtPrIsTrusted()\' with the correct arguments', done => {
+        const req = createRequest(+pr);
+
+        promisifyRequest(req).
+          then(() => expect(bvGetPrIsTrustedSpy).toHaveBeenCalledWith(9)).
+          then(done, done.fail);
+      });
+
+
+      it('should propagate errors from BuildVerifier', done => {
+        bvGetPrIsTrustedSpy.and.callFake(() => Promise.reject('Test'));
+
+        const req = createRequest(+pr).expect(500, 'Test');
+
+        promisifyRequest(req).
+          then(() => {
+            expect(bvGetPrIsTrustedSpy).toHaveBeenCalledWith(9);
+            expect(bcUpdatePrVisibilitySpy).not.toHaveBeenCalled();
+          }).
+          then(done, done.fail);
+      });
+
+
+      it('should call \'BuildCreator#updatePrVisibility()\' with the correct arguments', done => {
+        bvGetPrIsTrustedSpy.and.callFake((pr2: number) => Promise.resolve(pr2 === 42));
+
+        const req1 = createRequest(24);
+        const req2 = createRequest(42);
+
+        Promise.all([
+          promisifyRequest(req1).then(() => expect(bcUpdatePrVisibilitySpy).toHaveBeenCalledWith('24', false)),
+          promisifyRequest(req2).then(() => expect(bcUpdatePrVisibilitySpy).toHaveBeenCalledWith('42', true)),
+        ]).then(done, done.fail);
+      });
+
+
+      it('should propagate errors from BuildCreator', done => {
+        bcUpdatePrVisibilitySpy.and.callFake(() => Promise.reject('Test'));
+
+        const req = createRequest(+pr).expect(500, 'Test');
+        verifyRequests([req], done);
+      });
+
+
+      describe('on success', () => {
+
+        it('should respond with 200 (action: undefined)', done => {
+          bvGetPrIsTrustedSpy.and.returnValues(Promise.resolve(true), Promise.resolve(false));
+
+          const reqs = [4, 2].map(num => createRequest(num).expect(200, http.STATUS_CODES[200]));
+          verifyRequests(reqs, done);
+        });
+
+
+        it('should respond with 200 (action: labeled)', done => {
+          bvGetPrIsTrustedSpy.and.returnValues(Promise.resolve(true), Promise.resolve(false));
+
+          const reqs = [4, 2].map(num => createRequest(num, 'labeled').expect(200, http.STATUS_CODES[200]));
+          verifyRequests(reqs, done);
+        });
+
+
+        it('should respond with 200 (action: unlabeled)', done => {
+          bvGetPrIsTrustedSpy.and.returnValues(Promise.resolve(true), Promise.resolve(false));
+
+          const reqs = [4, 2].map(num => createRequest(num, 'unlabeled').expect(200, http.STATUS_CODES[200]));
+          verifyRequests(reqs, done);
+        });
+
+
+        it('should respond with 200 (and do nothing) if \'action\' implies no visibility change', done => {
+          const promises = ['foo', 'notlabeled'].
+            map(action => createRequest(+pr, action).expect(200, http.STATUS_CODES[200])).
+            map(promisifyRequest);
+
+          Promise.all(promises).
+            then(() => {
+              expect(bvGetPrIsTrustedSpy).not.toHaveBeenCalled();
+              expect(bcUpdatePrVisibilitySpy).not.toHaveBeenCalled();
+            }).
+            then(done, done.fail);
+        });
+
       });
 
     });
@@ -454,14 +584,15 @@ describe('uploadServerFactory', () => {
 
     describe('ALL *', () => {
 
-      it('should respond with 405', done => {
-        const responseFor = (method: string) => `Unsupported method in request: ${method.toUpperCase()} /some/url`;
+      it('should respond with 404', done => {
+        const responseFor = (method: string) => `Unknown resource in request: ${method.toUpperCase()} /some/url`;
 
         verifyRequests([
-          agent.put('/some/url').expect(405, responseFor('put')),
-          agent.post('/some/url').expect(405, responseFor('post')),
-          agent.patch('/some/url').expect(405, responseFor('patch')),
-          agent.delete('/some/url').expect(405, responseFor('delete')),
+          agent.get('/some/url').expect(404, responseFor('get')),
+          agent.put('/some/url').expect(404, responseFor('put')),
+          agent.post('/some/url').expect(404, responseFor('post')),
+          agent.patch('/some/url').expect(404, responseFor('patch')),
+          agent.delete('/some/url').expect(404, responseFor('delete')),
         ], done);
       });
 

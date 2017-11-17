@@ -17,7 +17,7 @@
       "title": "Events"
     },
     {
-      "url": "https://blog.angularjs.org/",
+      "url": "https://blog.angular.io/",
       "title": "Blog"
     }
   ],
@@ -39,7 +39,7 @@
           "title": "Events"
         },
         {
-          "url": "https://blog.angularjs.org/",
+          "url": "https://blog.angular.io/",
           "title": "Blog"
         }
       ]
@@ -62,6 +62,12 @@
     },
 
     {
+      "url": "guide/webpack",
+      "title": "Webpack: An Introduction",
+      "hidden": true
+    },
+
+    {
       "url": "guide/quickstart",
       "title": "Getting Started",
       "tooltip": "A gentle introduction to Angular."
@@ -77,34 +83,39 @@
           "tooltip": "Part 1: Introduction to the Tour of Heroes tutorial"
         },
         {
+          "url": "tutorial/toh-pt0",
+          "title": "2. The Application Shell",
+          "tooltip": "Part 2: Creating the application shell"
+        },
+        {
           "url": "tutorial/toh-pt1",
-          "title": "2. The Hero Editor",
-          "tooltip": "Part 2: Build a simple hero editor"
+          "title": "3. The Hero Editor",
+          "tooltip": "Part 3: Build a simple hero editor"
         },
         {
           "url": "tutorial/toh-pt2",
-          "title": "3. Master/Detail",
-          "tooltip": "Part 3: Build a master/detail page with a list of heroes."
+          "title": "4. Displaying a List",
+          "tooltip": "Part 4: Build a master/detail page with a list of heroes."
         },
         {
           "url": "tutorial/toh-pt3",
-          "title": "4. Multiple Components",
-          "tooltip": "Part 4: Refactor the master/detail view into separate components."
+          "title": "5. Master/Detail Components",
+          "tooltip": "Part 5: Refactor the master/detail view into separate components."
         },
         {
           "url": "tutorial/toh-pt4",
-          "title": "5. Services",
-          "tooltip": "Part 5: Create a reusable service to manage hero data."
+          "title": "6. Services",
+          "tooltip": "Part 6: Create a reusable service to manage hero data."
         },
         {
           "url": "tutorial/toh-pt5",
-          "title": "6. Routing",
-          "tooltip": "Part 6: Add the Angular router and navigate among the views."
+          "title": "7. Routing",
+          "tooltip": "Part 7: Add the Angular router and navigate among the views."
         },
         {
           "url": "tutorial/toh-pt6",
-          "title": "7. HTTP",
-          "tooltip": "Part 7: Use HTTP to retrieve and save hero data."
+          "title": "8. HTTP",
+          "tooltip": "Part 8: Use HTTP to retrieve and save hero data."
         }
       ]
     },
@@ -233,9 +244,14 @@
           "tooltip": "Dependency Injection: creating and injecting services",
           "children": [
             {
+              "url": "guide/dependency-injection-pattern",
+              "title": "The Dependency Injection pattern",
+              "tooltip": "Learn about the dependency injection pattern behind the Angular DI system."
+            },
+            {
               "url": "guide/dependency-injection",
-              "title": "Dependency Injection",
-              "tooltip": "Angular's dependency injection system creates and delivers dependent services \"just-in-time\"."
+              "title": "Angular Dependency Injection",
+              "tooltip": "Angular's dependency injection system creates and delivers dependent services to Angular-created classes."
             },
             {
               "url": "guide/hierarchical-dependency-injection",
@@ -252,7 +268,7 @@
 
         {
           "url": "guide/http",
-          "title": "Server Communication",
+          "title": "HttpClient",
           "tooltip": "Use HTTP to talk to a remote server."
         },
         {
@@ -283,14 +299,14 @@
           "tooltip": "Translate the app's template text into multiple languages."
         },
         {
+          "url": "guide/language-service",
+          "title": "Language Service",
+          "tooltip": "Use Angular Language Service to speed up dev time."
+        },
+        {
           "url": "guide/security",
           "title": "Security",
           "tooltip": "Developing for content security in Angular applications."
-        },
-        {
-          "url": "guide/ts-to-js",
-          "title": "TypeScript to JavaScript",
-          "tooltip": "Convert Angular TypeScript examples into ES6 and ES5 JavaScript."
         },
         {
           "title": "Setup & Deployment",
@@ -351,7 +367,11 @@
             }
           ]
         },
-
+        {
+          "url": "guide/universal",
+          "title": "Server-side Rendering",
+          "tooltip": "Render HTML server-side with Angular Universal."
+        },
         {
           "url": "guide/visual-studio-2015",
           "title": "Visual Studio 2015 QuickStart",
@@ -374,6 +394,12 @@
       "title": "API",
       "tooltip": "Details of the Angular classes and values.",
       "url": "api"
+    },
+    {
+      "url": "guide/change-log",
+      "title": "Change Log",
+      "tooltip": "Angular Documentation Change Log",
+      "hidden": true
     }
   ],
 
@@ -397,7 +423,7 @@
           "tooltip": "Press contacts, logos, and branding."
         },
         {
-          "url": "https://blog.angularjs.org/",
+          "url": "https://blog.angular.io/",
           "title": "Blog",
           "tooltip": "Angular Blog"
         }
@@ -407,7 +433,7 @@
       "title": "Help",
       "children": [
         {
-          "url": "http://stackoverflow.com/questions/tagged/angular2",
+          "url": "https://stackoverflow.com/questions/tagged/angular",
           "title": "Stack Overflow",
           "tooltip": "Stack Overflow: where the community answers your technical Angular questions."
         },
@@ -470,6 +496,9 @@
   ],
 
   "docVersions": [
-    { "title": "v2", "url": "https://v2.angular.io" }
+    { "title": "v4 (LTS)", "url": "https://v4.angular.io" },
+    { "title": "v2", "url": "https://v2.angular.io" },
+    { "title": "AngularDart", "url": "https://webdev.dartlang.org/angular" }
+
   ]
 }

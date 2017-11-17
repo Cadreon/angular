@@ -73,18 +73,6 @@ export interface AttributeDecorator {
    *
    * {@example core/ts/metadata/metadata.ts region='attributeFactory'}
    *
-   * ### Example as ES5 DSL
-   *
-   * ```
-   * var MyComponent = ng
-   *   .Component({...})
-   *   .Class({
-   *     constructor: [new ng.Attribute('title'), function(title) {
-   *       ...
-   *     }]
-   *   })
-   * ```
-   *
    * ### Example as ES5 annotation
    *
    * ```
@@ -201,12 +189,11 @@ export type ContentChildren = Query;
  *  @stable
  *  @Annotation
  */
-export const ContentChildren: ContentChildrenDecorator =
-    <ContentChildrenDecorator>makePropDecorator(
-        'ContentChildren',
-        (selector?: any, data: any = {}) =>
-            ({selector, first: false, isViewQuery: false, descendants: false, ...data}),
-        Query);
+export const ContentChildren: ContentChildrenDecorator = makePropDecorator(
+    'ContentChildren',
+    (selector?: any, data: any = {}) =>
+        ({selector, first: false, isViewQuery: false, descendants: false, ...data}),
+    Query);
 
 /**
  * Type of the ContentChild decorator / constructor function.
